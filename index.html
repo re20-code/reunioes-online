@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#4338ca">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Reuniões Agora • Hoje</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif}
+    .pulse{animation:p 1.5s infinite}
+    @keyframes p{0%,100%{opacity:1}50%{opacity:.55}}
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+<header class="bg-indigo-700 text-white sticky top-0 z-30 shadow">
+  <div class="max-w-2xl mx-auto px-4 py-3">
+    <h1 class="text-lg font-bold">Reuniões • Agora e Hoje</h1>
+    <p class="text-indigo-200 text-[11px]">API + grade pública • Horário de Brasília</p>
+  </div>
+</header>
+<main class="max-w-2xl mx-auto px-3 py-4">
+  <div class="bg-white rounded-xl border shadow-sm p-4 mb-4 flex items-center justify-between">
+    <div>
+      <p class="text-[10px] uppercase tracking-wide text-slate-400">Agora (Brasília)</p>
+      <p id="clock" class="text-2xl font-mono font-bold text-indigo-700">--:--:--</p>
+      <p id="status" class="text-[10px] text-slate-500">carregando…</p>
+    </div>
+    <div class="flex gap-2">
+      <button id="btnNow" onclick="setMode('now')" class="px-3 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white">Agora</button>
+      <button id="btnToday" onclick="setMode('today')" class="px-3 py-2 rounded-lg text-sm font-semibold bg-slate-200 text-slate-700">Hoje</button>
+    </div>
+  </div>
+  <input id="search" type="search" placeholder="Filtrar (AA, NA, CCA…)" class="w-full border rounded-lg px-3 py-2 text-sm mb-3" oninput="load()">
+  <p id="count" class="text-xs text-slate-500 mb-2"></p>
+  <div id="list" class="space-y-3 pb-10"></div>
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-[11px] text-amber-900">
+    <strong>Sobre os links:</strong> Quando o grupo publica ID/senha fixos, o botão <em>Entrar</em> abre o Zoom/Meet.
+    Salas do NA (CSR) mudam o tempo todo — use o botão que leva à lista AO VIVO (senha padrão <code>000000</code>).
+  </div>
+</main>
+<script>
+let mode = 'now';
+const API = '/api/meetings';
+
+function fmt(m) {
+  return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+}
+function clock() {
+  const n = new Date();
+  const u = n.getTime() + n.getTimezoneOffset()*60000;
+  const b = new Date(u - 3*3600000);
+  document.getElementById('clock').textContent =
+    String(b.getHours()).padStart(2,'0')+':'+String(b.getMinutes()).padStart(2,'0')+':'+String(b.getSeconds()).padStart(2,'0');
+}
+function setMode(m) {
+  mode = m;
+  document.getElementById('btnNow').className = 'px-3 py-2 rounded-lg text-sm font-semibold ' + (m==='now'?'bg-green-600 text-white':'bg-slate-200 text-slate-700');
+  document.getElementById('btnToday').className = 'px-3 py-2 rounded-lg text-sm font-semibold ' + (m==='today'?'bg-indigo-600 text-white':'bg-slate-200 text-slate-700');
+  load();
+}
+async function load() {
+  const q = document.getElementById('search').value.trim();
+  const el = document.getElementById('list');
+  document.getElementById('status').textContent = 'atualizando…';
+  try {
+    const r = await fetch(API + '?mode=' + mode + '&q=' + encodeURIComponent(q));
+    const data = await r.json();
+    document.getElementById('count').textContent = data.count + (mode==='now'?' agora':' hoje');
+    document.getElementById('status').textContent = 'API ok • ' + new Date(data.time_brt).toLocaleTimeString('pt-BR');
+    if (!data.meetings.length) {
+      el.innerHTML = '<div class="bg-white rounded-xl border p-6 text-center text-slate-500 text-sm">Nenhuma neste filtro.</div>';
+      return;
+    }
+    el.innerHTML = data.meetings.map(m => {
+      const live = m.live;
+      const btn = live ? 'bg-green-600' : 'bg-indigo-600';
+      const badge = live ? '<span class="pulse ml-1 text-[10px] font-bold text-green-800 bg-green-100 px-1.5 py-0.5 rounded">AGORA</span>' : '';
+      return `<div class="bg-white rounded-xl border shadow-sm p-4 ${live?'ring-2 ring-green-500':''}">
+        <div class="flex gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-1">
+              <span class="text-[10px] font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">${m.fellowship}</span>${badge}
+            </div>
+            <h3 class="font-semibold mt-1 leading-tight">${m.group}</h3>
+            <p class="text-xs text-slate-600 mt-0.5">${fmt(m.start_min)} – ${fmt(m.end_min)}</p>
+            ${m.zoom_id?`<p class="text-[10px] text-slate-500 mt-1">ID ${m.zoom_id}${m.password?' • senha '+m.password:''}</p>`:''}
+            ${m.note?`<p class="text-[10px] text-amber-700 mt-0.5">${m.note}</p>`:''}
+          </div>
+          <a href="${m.link}" target="_blank" rel="noopener"
+             class="shrink-0 self-center px-3 py-2 ${btn} text-white text-xs font-semibold rounded-lg">Entrar</a>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('status').textContent = 'erro na API – confira se o servidor está no ar';
+    el.innerHTML = '<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">Não consegui falar com a API. Se estiver rodando local, use a URL do servidor.</div>';
+  }
+}
+setInterval(clock, 1000);
+clock();
+setMode('now');
+setInterval(load, 60000);
+</script>
+</body>
+</html>
